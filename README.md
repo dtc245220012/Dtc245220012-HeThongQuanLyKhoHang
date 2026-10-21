@@ -1,221 +1,382 @@
-# HỆ THỐNG QUẢN LÝ KHO HÀNG — ĐỀ 5
+# HỆ THỐNG QUẢN LÝ KHO HÀNG — ĐỀ TÀI 5
 
-Bài thực hành môn **Triển khai và Quản trị Hệ thống Phần mềm**. Website Node.js/Express tích hợp MySQL, phpMyAdmin, Nginx, Prometheus, Grafana, Loki, Promtail, cAdvisor và các exporter. **Tất cả dịch vụ chạy bằng Docker Compose.**
+**Môn học:** Triển khai và Quản trị Hệ thống Phần mềm  
+**Đề tài:** Triển khai và quản trị Hệ thống quản lý kho hàng bằng Docker Compose  
+**Mã số sinh viên / tài khoản GitHub:** `dtc245220012`  
+**Repository:** [dtc245220012/Dtc245220012-HeThongQuanLyKhoHang](https://github.com/dtc245220012/Dtc245220012-HeThongQuanLyKhoHang)
 
-> Dự án mẫu phục vụ bài thực hành **trên máy cá nhân (localhost)**, không mặc định là giải pháp production. Chưa xác nhận chạy end-to-end trên máy của sinh viên; cần thực hiện đầy đủ các bài kiểm tra trong tài liệu.
+## 1. Giới thiệu
 
-## 1. Yêu cầu máy
+Dự án triển khai ứng dụng **quản lý kho hàng** bằng **Node.js/Express** và **MySQL 8.4**, sử dụng **Nginx** làm reverse proxy, **phpMyAdmin** để quản trị cơ sở dữ liệu, **Prometheus + Grafana** để giám sát và **Loki + Promtail** để thu thập log tập trung. Hệ thống được đóng gói, cấu hình và vận hành bằng **Docker Compose**.
 
-- Windows 11 với Docker Desktop (Linux containers), WSL 2, Git, VS Code.
-- Gợi ý: tối thiểu 8 GB RAM, lý tưởng 16 GB RAM; Docker được cấp >= 4 GB RAM và đủ dung lượng ổ đĩa.
-- Docker Desktop đã khởi động; PowerShell chạy `docker version` và `docker compose version` thành công.
+Các thành phần giám sát bổ trợ gồm **cAdvisor**, **MySQL Exporter** và **Nginx Exporter**.
 
-## 2. Chạy nhanh trên Windows 11 (PowerShell)
+**Phạm vi:** Dự án phục vụ thực hành, demo và đánh giá trên máy cá nhân (`localhost`); **không phải cấu hình production trên Internet**.
 
-Mở VS Code -> File -> Open Folder -> chọn thư mục dự án -> Terminal -> New Terminal (PowerShell):
+### Kết quả triển khai thực tế
+
+- Đã khởi chạy hệ thống bằng Docker Compose và kiểm tra các dịch vụ chính hoạt động.
+- Đã truy cập ứng dụng qua Nginx, phpMyAdmin, Prometheus, Grafana và Loki theo cấu hình cổng trên máy thực hành.
+- Đã kiểm tra **5/5 targets UP** trên Prometheus.
+- Đã xem dữ liệu giám sát trên Grafana, bao gồm biểu đồ **Memory by cgroup (MiB)** đã chỉnh sửa cho dữ liệu cAdvisor thực tế.
+- Đã chạy và nhận kết quả với **3 truy vấn LogQL**.
+- Đã kiểm tra các biện pháp hardening như non-root, network isolation, security headers và hạn chế quyền Docker.
+- Đã push mã nguồn cùng **3 commit** lên repository GitHub nêu trên.
+
+> Kết quả trên dựa vào lần triển khai và các kiểm tra đã thực hiện trên máy cá nhân. Các máy khác cần chạy lại bước kiểm tra vì cấu hình cổng, tài nguyên và phiên bản Docker có thể khác nhau.
+
+## 2. Yêu cầu môi trường
+
+- Windows 11, Docker Desktop (Linux containers, WSL 2).
+- Git, Visual Studio Code và PowerShell.
+- RAM tối thiểu khuyến nghị 8 GB; 16 GB sẽ thuận lợi hơn khi chạy đồng thời 11 dịch vụ.
+- Docker Desktop đang chạy; xác nhận bằng:
+
+```powershell
+docker version
+docker compose version
+git --version
+```
+
+## 3. Cấu trúc dự án
+
+```text
+He_Thong_Quan_Ly_Kho_Hang/
+├── app/                       Ứng dụng Express, giao diện, Dockerfile
+├── db/init/                   Script khởi tạo MySQL và tài khoản exporter
+├── nginx/                     Reverse proxy và cấu hình bảo mật
+├── prometheus/                Cấu hình scrape metrics
+├── grafana/provisioning/      Datasource và dashboard Grafana
+├── loki/                      Cấu hình Loki
+├── promtail/                  Cấu hình thu thập log
+├── scripts/                   Tạo .env và kiểm tra dịch vụ
+├── docs/                      Hướng dẫn thực hành và báo cáo Word
+├── docker-compose.yml         Khởi chạy toàn bộ hệ thống
+├── .env.example               Mẫu cấu hình, KHÔNG chứa mật khẩu thật
+├── .gitignore                 Loại trừ file nhạy cảm
+└── README.md                  Hướng dẫn và tổng hợp kết quả
+```
+
+## 4. Hướng dẫn chạy trên Windows 11
+
+### Bước 1 — Lấy mã nguồn
+
+Có thể mở thư mục dự án đã tải về trên VS Code hoặc clone repository:
+
+```powershell
+git clone https://github.com/dtc245220012/Dtc245220012-HeThongQuanLyKhoHang.git
+cd Dtc245220012-HeThongQuanLyKhoHang
+```
+
+Nếu đã có thư mục dự án trên máy, **không cần clone lại**.
+
+### Bước 2 — Chuẩn bị `.env`
+
+Chạy trong Terminal PowerShell tại thư mục có `docker-compose.yml`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-env.ps1
+```
+
+Script tạo `.env` từ `.env.example` với mật khẩu ngẫu nhiên nếu `.env` **chưa tồn tại**; script không ghi đè file đã có. **Không commit hoặc chụp ảnh nội dung `.env`**.
+
+Máy thực hành đã cấu hình cổng ứng dụng `8082` và Prometheus `9091` để tránh xung đột cổng. Có thể điều chỉnh các biến không nhạy cảm trong `.env` như sau:
+
+```dotenv
+APP_PORT=8082
+PHPMYADMIN_PORT=8081
+GRAFANA_PORT=3001
+PROMETHEUS_PORT=9091
+TZ=Asia/Ho_Chi_Minh
+```
+
+> Đây là **các cổng đã dùng trên máy thực hành**. Giá trị mặc định ở `.env.example` là `APP_PORT=8080` và `PROMETHEUS_PORT=9090`. Nếu sử dụng cổng mặc định trên máy khác, hãy thay URL tương ứng trong hướng dẫn.
+
+### Bước 3 — Khởi động
+
+```powershell
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 ```
 
-**Đợi trạng thái container ổn định** trước khi thử đăng nhập. Kiểm tra khi có lỗi:
+Kiểm tra log nếu có container chưa lên:
 
 ```powershell
 docker compose logs --tail 100 mysql app nginx
 ```
 
-Mở `.env` để xem `ADMIN_USERNAME` và `ADMIN_PASSWORD`, dùng tài khoản này đăng nhập. **Không đăng .env hoặc ảnh chứa mật khẩu lên GitHub**.
+Đợi MySQL và ứng dụng có trạng thái `healthy` trước khi thử đăng nhập.
 
-| Dịch vụ | URL trên máy người thực hiện | Tài khoản |
+### Bước 4 — Truy cập các giao diện
+
+| Dịch vụ | Địa chỉ trên máy đã thực hành | Ghi chú |
 |---|---|---|
-| Website qua Nginx | http://localhost:8080 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` trong `.env` |
-| phpMyAdmin | http://localhost:8081 | `MYSQL_USER`, `MYSQL_PASSWORD` trong `.env` |
-| Grafana | http://localhost:3001 | `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` trong `.env` |
-| Prometheus targets | http://localhost:9090/targets | Không yêu cầu đăng nhập; chỉ mở loopback |
+| Website qua Nginx | http://localhost:8082 | Trang đăng nhập: `/login` |
+| phpMyAdmin | http://localhost:8081 | Đăng nhập bằng thông tin MySQL hợp lệ trong `.env` |
+| Grafana | http://localhost:3001 | Dùng `GRAFANA_ADMIN_USER` và mật khẩu tương ứng |
+| Prometheus Targets | http://localhost:9091/targets | Kiểm tra trạng thái job |
 
-**Lưu ý:** Nếu sửa `.env` sau khi MySQL đã tạo volume dữ liệu, mật khẩu tài khoản MySQL sẽ **không tự thay đổi**; không xóa volume chỉ để sửa mật khẩu nếu đang có dữ liệu cần giữ. Lưu ý thay đổi `ADMIN_PASSWORD` cũng không tự đổi mật khẩu tài khoản đã được khởi tạo trong DB.
+Tài khoản đăng nhập quản trị website được tạo từ các biến `ADMIN_USERNAME` và `ADMIN_PASSWORD` **khi khởi tạo dữ liệu**. Không công bố thông tin đăng nhập trong README.
 
-## 3. Tính năng nghiệp vụ
+**Quan trọng khi thay mật khẩu:** Chỉnh `.env` sau khi MySQL đã khởi tạo volume **không tự đổi** mật khẩu các tài khoản trong database. Mật khẩu quản trị ứng dụng đã được khởi tạo trong database cũng không tự cập nhật chỉ bằng thay biến môi trường. Cần đổi mật khẩu tương ứng trong hệ thống và cập nhật cấu hình đồng bộ. Không dùng `docker compose down -v` chỉ để thay mật khẩu vì sẽ xóa dữ liệu trong volume.
 
-1. Đăng nhập quản trị (mật khẩu được băm scrypt, session cookie HttpOnly, CSRF cho biểu mẫu).
-2. Dashboard: đếm sản phẩm, nhà cung cấp, đơn vị tồn kho, số mặt hàng sắp hết.
-3. Quản lý sản phẩm: thêm, sửa, xóa sản phẩm chưa có lịch sử giao dịch; tìm kiếm theo SKU và tên.
-4. Quản lý nhà cung cấp: thêm, sửa, xóa, liên kết với sản phẩm.
-5. Nhập kho: thêm số lượng, ghi lịch sử và chứng từ.
-6. Xuất kho: khóa dòng bằng `SELECT ... FOR UPDATE`, không cho tồn âm, ghi giao dịch cùng transaction.
-7. Xem lịch sử nhập/xuất và cảnh báo hàng sắp hết.
-
-## 4. Kiến trúc
+## 5. Kiến trúc hệ thống
 
 ```text
-Trình duyệt
-  |--> localhost:8080 --> Nginx (non-root, headers, reverse proxy)
-  |                         |
-  |                         v
-  |                   Node.js Express (non-root)
-  |                         |
-  |                         v
-  |                       MySQL 8.4 <---- phpMyAdmin (localhost:8081)
-  |
-  +--> localhost:3001 --> Grafana <--- Prometheus <--- app / Nginx exporter / MySQL exporter / cAdvisor
-  |                           |
-  |                           +--------- Loki <--- Promtail <--- volume logs app + Nginx
-  +--> localhost:9090 --> Prometheus /targets
+                         Người dùng / Trình duyệt
+                                   |
+                             localhost:8082
+                                   |
+                     Nginx reverse proxy (non-root)
+                                   |
+                            Node.js / Express
+                                   |
+                                MySQL 8.4
+                                   ^
+                                   |
+                       phpMyAdmin (:8081)
+
+   Metrics:  App / Nginx Exporter / MySQL Exporter / cAdvisor
+                             | 
+                         Prometheus (:9091)
+                             |
+                         Grafana (:3001)
+
+   Logs:    App + Nginx  -->  Promtail  -->  Loki  -->  Grafana Explore
 ```
 
-- `entry`: mạng có cổng localhost để truy cập các UI.
-- `application`: mạng nội bộ Nginx ⇄ app.
-- `data`: mạng nội bộ app ⇄ MySQL ⇄ phpMyAdmin ⇄ MySQL exporter.
-- `observability`: mạng nội bộ thu thập metrics và log.
-- Database KHÔNG mở cổng 3306 trên host; Prometheus và Grafana chỉ mở cổng trên `127.0.0.1`.
+**Phân tách mạng Docker:**
 
-## 5. Kịch bản demo nghiệp vụ
+- `entry`: cho phép truy cập các giao diện cần thiết từ `127.0.0.1`.
+- `application`: kết nối Nginx và ứng dụng.
+- `data`: kết nối ứng dụng, MySQL, phpMyAdmin và MySQL Exporter.
+- `observability`: mạng dành cho giám sát và log.
+- `application`, `data`, `observability` là mạng nội bộ (`internal: true`).
+- MySQL không publish cổng `3306` ra máy host.
 
-1. Vào `/login`, đăng nhập.
-2. Tạo nhà cung cấp `Công ty ABC` ở mục Nhà cung cấp.
-3. Tạo sản phẩm `SP001 - Bàn phím cơ`, đơn vị `cái`, ngưỡng cảnh báo 5.
-4. Ở Nhập kho, nhập **30**, mã phiếu `PN001`; kiểm tra tồn = **30**.
-5. Ở Xuất kho, xuất **7**, mã phiếu `PX001`; kiểm tra tồn = **23**.
-6. Thử xuất **50**: hệ thống từ chối do thiếu tồn, số dư vẫn là **23**.
-7. Kiểm tra ba giao dịch ở Lịch sử: chỉ có `PN001` và `PX001` thành công, phiếu xuất 50 không được ghi.
-8. Mở phpMyAdmin -> CSDL `inventory` -> bảng `products` và `stock_movements` để đối chiếu.
+## 6. Chức năng nghiệp vụ
 
-## 6. Prometheus + Grafana (Commit 2)
+1. Đăng nhập và đăng xuất quản trị.
+2. Dashboard tổng quan: sản phẩm, nhà cung cấp, tổng lượng tồn và cảnh báo sắp hết hàng.
+3. Quản lý sản phẩm: thêm, sửa, xóa trong giới hạn ràng buộc dữ liệu; tìm theo SKU và tên.
+4. Quản lý nhà cung cấp và liên kết với sản phẩm.
+5. Nhập kho, cập nhật tồn và lưu phiếu giao dịch.
+6. Xuất kho, kiểm tra số lượng tồn, ngăn xuất quá số lượng có sẵn.
+7. Theo dõi lịch sử nhập – xuất và mặt hàng sắp hết.
 
-- Vào http://localhost:9090/targets, kiểm tra `inventory-app`, `cadvisor`, `nginx`, `mysql`, `prometheus` ở trạng thái UP.
-- Vào Grafana http://localhost:3001 -> **Dashboards** -> **Inventory Course** -> **Inventory - System Monitoring**.
-- Dashboard được provisioning tự động từ `grafana/provisioning/dashboards/inventory-dashboard.json`.
-- PromQL demo:
+### Kịch bản demo nghiệp vụ
+
+Đây là kịch bản để giảng viên có thể thực hiện lại, **không phải tuyên bố rằng mọi dữ liệu mẫu đã tồn tại trong database hiện tại**:
+
+1. Đăng nhập tại http://localhost:8082/login.
+2. Tạo nhà cung cấp: `Công ty ABC`.
+3. Tạo sản phẩm: `SP001 – Bàn phím cơ`, đơn vị `cái`, ngưỡng cảnh báo `5`.
+4. Nhập kho `30` sản phẩm, mã phiếu `PN001` → tồn dự kiến `30`.
+5. Xuất kho `7` sản phẩm, mã phiếu `PX001` → tồn dự kiến `23`.
+6. Thử xuất `50` sản phẩm → hệ thống phải từ chối do không đủ tồn, số lượng vẫn là `23`.
+7. Kiểm tra lịch sử giao dịch: chỉ **2 phiếu hợp lệ** (`PN001`, `PX001`); thao tác xuất 50 bị từ chối không tạo phiếu xuất thành công.
+8. Vào phpMyAdmin, đối chiếu các bảng `products`, `stock_movements` và số lượng tồn.
+
+## 7. Giám sát Prometheus + Grafana
+
+### Prometheus
+
+Mở http://localhost:9091/targets. Trong lần kiểm thử đã ghi nhận **5/5 targets UP**: `inventory-app`, `cadvisor`, `nginx`, `mysql`, `prometheus`.
+
+Một số truy vấn PromQL:
 
 ```promql
 up{job=~"inventory-app|cadvisor|nginx|mysql"}
 sum(rate(inventory_http_requests_total[5m]))
 mysql_global_status_threads_connected
 rate(nginx_http_requests_total[5m])
-sum by (name) (container_memory_working_set_bytes{name!=""}) / 1024 / 1024
 ```
 
-> cAdvisor trên Windows qua Docker Desktop có thể có giới hạn riêng đối với container/host metrics. Nếu panel trống, kiểm tra `http://localhost:9090/targets`, quyền mount và `docker compose logs cadvisor` trước khi chụp minh chứng.
+### Grafana
 
-## 7. Loki + Promtail (Commit 3)
+Mở http://localhost:3001 → **Dashboards** → **Inventory Course** → **Inventory - System Monitoring**.
 
-- Vào Grafana -> **Explore** -> data source `Loki`.
-- Ở website, thực hiện vài thao tác nhập/xuất và truy cập trang, đợi ít nhất một chu kỳ thu thập log.
-- Chạy ba truy vấn LogQL:
+Dashboard hiển thị trạng thái dịch vụ, số request ứng dụng, kết nối MySQL, request Nginx và số liệu bộ nhớ từ cAdvisor.
+
+**Cập nhật quan trọng đã áp dụng trên máy thực hành:** Truy vấn bộ nhớ trong bản README cũ sử dụng nhãn `name` không có dữ liệu tại máy này. Truy vấn đã sử dụng thành công là:
+
+```promql
+sum by (id) (container_memory_working_set_bytes{job="cadvisor",id!="",id!="/",id!="/docker"}) / 1024 / 1024
+```
+
+Panel được đổi tên **Memory by cgroup (MiB)**, với legend `{{id}}`. Biểu đồ này thể hiện **bộ nhớ theo cgroup**, không nên mô tả nhầm là đã định danh chính xác từng container theo tên.
+
+Dashboard được provision từ file:
+
+```text
+grafana/provisioning/dashboards/inventory-dashboard.json
+```
+
+Sau khi thay đổi file dashboard, có thể khởi động lại Grafana để tải cấu hình đã được provision:
+
+```powershell
+docker compose restart grafana
+```
+
+## 8. Hệ thống log tập trung Loki + Promtail
+
+Mở **Grafana → Explore → chọn data source Loki**. Trong lần kiểm thử, đã có log ứng dụng và log Nginx được thu thập thành công.
+
+**Ba truy vấn LogQL đã thực hiện và có kết quả trên máy thực hành:**
+
+**Truy vấn 1 — Log ứng dụng:**
 
 ```logql
 {job="inventory-app"}
-{job="inventory-app", event="stock_in"}
-{job="inventory-nginx"} | json | status >= 400
 ```
 
-Nếu chưa có log lỗi 4xx, chủ động truy cập `http://localhost:8080/trang-khong-ton-tai` rồi chạy query thứ 3. Mở *Time range* thành **Last 1 hour**. App và Nginx ghi file trong Docker named volumes, Promtail đọc read-only, không cần quyền truy cập Docker socket.
+**Truy vấn 2 — Log Nginx:**
 
-## 8. Hardening (Commit 1 + toàn bộ)
+```logql
+{job="inventory-nginx"}
+```
 
-- **Non-root app:** `USER node` trong `app/Dockerfile`.
-- **Non-root Nginx:** dùng `nginxinc/nginx-unprivileged`.
-- **Network isolation:** `application`, `data`, `observability` đều `internal: true`; chỉ các UI cần thiết nằm mạng `entry`.
-- **Mật khẩu ngẫu nhiên:** `scripts/setup-env.ps1` tạo 5 mật khẩu 48 ký tự hex, `.env` được `.gitignore` loại khỏi Git.
-- **Least privilege:** app sử dụng user MySQL riêng (`MYSQL_USER` chỉ được tạo trong DB ứng dụng), exporter có user riêng, thông tin nhạy cảm không để trong repo.
-- **Security headers:** Nginx có CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy; `/metrics` bị chặn qua Nginx.
-- **Khác:** cookie HttpOnly + SameSite, kiểm tra CSRF, prepared statements, password scrypt, giới hạn login, `no-new-privileges`, một số `cap_drop: ALL`.
-- Hệ thống demo chạy **HTTP trên localhost** theo lựa chọn `security headers` hợp lệ trong đề; không tuyên bố đã có HTTPS.
+**Truy vấn 3 — Lọc lỗi ứng dụng:**
 
-Kiểm tra header bằng PowerShell:
+```logql
+{job="inventory-app"} | json | level="error"
+```
+
+Truy vấn lọc lỗi từng hiển thị các bản ghi lỗi khởi động và lỗi yêu cầu xuất kho vượt số lượng tồn. Số lượng bản ghi hiển thị **thay đổi theo khoảng thời gian lọc**, không phải con số cố định.
+
+Nếu chưa có dữ liệu, truy cập website để phát sinh log, mở rộng **Time range** (ví dụ *Last 1 hour*), kiểm tra Promtail và Loki:
 
 ```powershell
-curl.exe -I http://localhost:8080/login
+docker compose logs --tail 100 promtail loki
 ```
 
-Kiểm tra quyền người dùng:
+## 9. Hardening và bảo mật
+
+Các kiểm tra đã thực hiện:
+
+| Biện pháp | Thiết lập / cách kiểm chứng |
+|---|---|
+| Non-root | `docker compose exec app id` → `uid=1000(node)`; `docker compose exec nginx id` → `uid=101(nginx)` |
+| Network isolation | `application`, `data`, `observability` đều có `Internal=true` |
+| Security headers | Nginx phản hồi `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy` |
+| Hạn chế quyền container | App và Nginx có `cap_drop: ALL` và `no-new-privileges:true` |
+| Mật khẩu / thông tin nhạy cảm | Script sinh mật khẩu ngẫu nhiên; file `.env` bị loại khỏi Git bằng `.gitignore` |
+| Giới hạn truy cập | Các cổng web demo được bind `127.0.0.1`; MySQL không mở cổng DB trên host |
+
+Lệnh kiểm tra thực tế:
 
 ```powershell
 docker compose exec app id
 docker compose exec nginx id
+curl.exe -I http://localhost:8082/login
+
+docker network inspect inventory-coursework_application --format '{{.Internal}}'
+docker network inspect inventory-coursework_data --format '{{.Internal}}'
+docker network inspect inventory-coursework_observability --format '{{.Internal}}'
+
+docker inspect inventory-coursework-app-1 --format '{{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}'
+docker inspect inventory-coursework-nginx-1 --format '{{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}'
 ```
 
-## 9. Kế hoạch 3 commit theo yêu cầu đề
+Các tên container và network ở trên theo Compose project `inventory-coursework` trong bản triển khai này; nếu thay đổi tên project, hãy xem `docker compose ps` và `docker network ls` để tìm tên tương ứng.
 
-Trong thư mục dự án (sau khi tạo repo GitHub mang tên theo mã sinh viên), thực hiện 3 commit **có nội dung thật**:
+**Giới hạn bảo mật:** Hệ thống dùng **HTTP trên localhost**, chưa cấu hình HTTPS cho truy cập Internet. Trước khi đưa lên môi trường production cần bổ sung HTTPS, quản lý secret, sao lưu/khôi phục và kiểm thử bảo mật. Mật khẩu từng được chia sẻ khi hỗ trợ cài đặt cần được **thay mới** trước khi công khai môi trường thật; chỉ bỏ qua `.env` khỏi Git không đồng nghĩa đã an toàn tuyệt đối.
+
+## 10. GitHub và lịch sử 3 commit
+
+**Repository chính thức:**  
+https://github.com/dtc245220012/Dtc245220012-HeThongQuanLyKhoHang
+
+**Nhánh:** `main`
+
+| Commit | Nội dung | Mã commit |
+|---|---|---|
+| 1 | Triển khai website, MySQL và Nginx | `5fcbc81` |
+| 2 | Bổ sung Prometheus và Grafana | `1f5c0ea` |
+| 3 | Bổ sung Loki, Promtail và tài liệu | `132efe6` |
+
+Các commit trên đã được push thành công qua `git push -u origin main` và repository đã hiển thị mã nguồn trên GitHub.
+
+Kiểm tra nhanh:
 
 ```powershell
-git init
-git branch -M main
-git add app db nginx docker-compose.yml .env.example .gitignore README.md scripts
-git commit -m "feat: inventory app with MySQL phpMyAdmin and Nginx"
-git add prometheus grafana
-git commit -m "feat: monitor app Nginx MySQL and containers with Prometheus Grafana"
-git add loki promtail docs
-git commit -m "feat: centralized log collection with Loki Promtail and security report"
+git remote -v
+git log -3 --oneline
+git status
+git ls-files .env
+git check-ignore -v .env
 ```
 
-> Các thư mục giám sát và log đã có trong bản source tải về; để ghi đúng lịch sử phát triển, có thể làm lần lượt từng giai đoạn rồi commit. `docker-compose.yml` cấu hình đầy đủ ngay từ đầu để chạy cả hệ thống; commit 2 và 3 bổ sung file cấu hình từng thành phần.
+Lệnh `git ls-files .env` cần không có đầu ra. File backup Grafana `*.bak` nếu còn xuất hiện trong *Untracked files* có thể giữ cục bộ hoặc thêm quy tắc ignore phù hợp; **không cần commit bản backup**.
 
-Sau khi tạo repository **trống** trên GitHub, kết nối bằng đường dẫn chính xác do GitHub cung cấp (không chèn tên tài khoản giả vào báo cáo):
+**Lưu ý:** Bài thực hành yêu cầu tối thiểu 3 commit có ý nghĩa. Nếu cập nhật README sau khi đã nộp 3 commit, việc tạo thêm commit là bình thường và không làm mất lịch sử ba commit trước đó.
 
-```powershell
-git remote add origin https://github.com/TAI_KHOAN_CUA_BAN/TEN_REPO.git
-git push -u origin main
-```
-
-Kiểm tra `git status` không liệt kê `.env` và trên GitHub phải có đủ 3 commit; nếu đã push sau commit cuối, cả 3 commit sẽ xuất hiện trên GitHub.
-
-## 10. Lệnh kiểm tra, dừng, xóa dữ liệu
+## 11. Kiểm tra, dừng và quản lý dữ liệu
 
 ```powershell
-# Hiện trạng thái và logs
+# Xem trạng thái dịch vụ
 docker compose ps
-docker compose logs -f app nginx mysql
 
-# Kiểm tra tự động các đường dẫn
-powershell -ExecutionPolicy Bypass -File .\scripts\demo-check.ps1
+# Xem log ba dịch vụ chính
+docker compose logs --tail 100 app nginx mysql
 
-# Xem security headers
-curl.exe -I http://localhost:8080/login
+# Kiểm tra các URL theo cổng thực tế trên máy: xem bên dưới
+```
 
-# Dừng mà KHÔNG xóa dữ liệu
+Các lệnh kiểm tra URL nên chạy trực tiếp trong PowerShell:
+
+```powershell
+curl.exe -I http://localhost:8082/login
+curl.exe -I http://localhost:8081/
+curl.exe -I http://localhost:9091/-/ready
+curl.exe -I http://localhost:3001/login
+```
+
+> Script `scripts/demo-check.ps1` trong bộ nguồn ban đầu vẫn có URL mặc định `8080` và `9090`. Khi máy sử dụng `8082` và `9091`, cần sửa cổng trong script đó trước khi dùng hoặc sử dụng lệnh `curl.exe` ở trên. Không kết luận hệ thống lỗi chỉ vì script đang trỏ nhầm cổng.
+
+```powershell
+# Dừng các container, giữ nguyên dữ liệu
 docker compose down
 
-# Chỉ dùng khi chấp nhận XÓA SẠCH dữ liệu demo:
+# Khởi động lại
+docker compose up -d
+
+# CHỈ sử dụng nếu thực sự muốn xóa các volume dữ liệu
 docker compose down -v
 ```
 
-## 11. Minh chứng cần chụp ảnh đưa vào báo cáo
+**Cảnh báo:** `docker compose down -v` có thể xóa dữ liệu MySQL và các volume liên quan. Không chạy lệnh này khi muốn giữ dữ liệu để demo/nộp bài.
 
-- GitHub repository, commit history (tối thiểu 3 commit), README.
-- `docker compose ps`, các container chạy.
-- Website đăng nhập, dashboard, danh sách hàng, nhà cung cấp.
-- Nhập 30, xuất 7, thử xuất 50 bị chặn, tồn 23, lịch sử chứng từ.
-- phpMyAdmin: các bảng MySQL, dữ liệu sản phẩm và lịch sử.
-- `curl.exe -I` chứng minh Nginx security headers.
-- Prometheus Targets `UP` và dashboard Grafana.
-- Grafana Explore 3 LogQL với dữ liệu thật.
-- `docker compose exec app id`, `docker compose exec nginx id`, mô tả mạng và `.env` bị loại khỏi Git (KHÔNG lộ nội dung mật khẩu).
+## 12. Lỗi từng gặp và cách xử lý
 
-## 12. Thư mục mã nguồn
+**Lỗi khởi tạo MySQL do cột `password_hash` quá ngắn:** Khi chạy ban đầu, cột `password_hash` trong bảng người dùng cần tăng kích thước từ `VARCHAR(160)` lên `VARCHAR(255)`. Trên máy thực hành đã sửa schema và dữ liệu đang chạy. Nếu triển khai trên máy khác, đảm bảo file `db/init/001-schema.sql` định nghĩa `password_hash VARCHAR(255) NOT NULL`.
 
-```text
-app/                      Express app, Dockerfile, CSS
-db/init/                  SQL schema, tạo user exporter
-nginx/                    Dockerfile Nginx non-root, reverse proxy
-prometheus/               scrape jobs
-grafana/provisioning/     data sources + dashboard
-loki/                     storage Loki TSDB v13
-promtail/                 tail logs app/nginx
-scripts/                  tạo secret, kiểm tra demo
-docs/                     hướng dẫn + mẫu báo cáo
-docker-compose.yml        chạy toàn bộ dịch vụ
-.env.example              mẫu config KHÔNG chứa mật khẩu thật
-```
+**Dashboard Grafana không có dữ liệu bộ nhớ:** Dùng PromQL theo `id` tại Mục 7 thay cho truy vấn theo nhãn `name`, sau đó reload Grafana khi cần.
 
-## 13. Lưu ý vận hành
+**GitHub báo 403 khi push:** Tài khoản Git dùng xác thực phải có quyền ghi vào repository. Dự án đã chuyển `origin` sang repository do `dtc245220012` sở hữu và push thành công. Không cần tạo lại 3 commit.
 
-- Mã nguồn được viết để **triển khai thử nghiệm**. Chưa thực hiện kiểm thử thực tế Docker Desktop trong môi trường tạo file này, nên cần xác nhận thực tế trên máy của bạn.
-- Dashboard Prometheus chỉ có kết quả sau khi container khởi động và có dữ liệu metrics.
-- Nếu MySQL init lỗi, xem log trước khi đụng đến volume. Không dùng `down -v` khi muốn giữ dữ liệu.
-- Loki/Promtail được sử dụng vì **đề bài yêu cầu**; công nghệ này đã có thay đổi vòng đời hỗ trợ, cần xem xét nếu chuyển sang môi trường thực tế lâu dài.
-- Nếu sử dụng cho Internet thật, phải bổ sung HTTPS với chứng chỉ tin cậy, secret manager, backup/restore, phân quyền sâu và kiểm thử bảo mật.
+## 13. Danh sách ảnh minh chứng cần đưa vào báo cáo
+
+Bài thực hành yêu cầu **báo cáo tối thiểu 10 trang**, mô tả cấu trúc hệ thống, quá trình triển khai, kết quả và ảnh minh chứng. Nên có:
+
+1. Repository GitHub, danh sách source, README và lịch sử **3 commit**.
+2. Terminal `docker compose ps` với các dịch vụ hoạt động.
+3. Website: đăng nhập, dashboard, sản phẩm, nhà cung cấp, nhập/xuất kho.
+4. Kịch bản nhập `30`, xuất `7`, từ chối xuất `50`, tồn `23` (nếu đã thực hiện trên dữ liệu demo).
+5. phpMyAdmin: bảng dữ liệu sản phẩm, lịch sử giao dịch.
+6. Nginx: truy cập website qua reverse proxy, kết quả `curl.exe -I` có security headers.
+7. Prometheus: màn hình **Targets 5/5 UP**.
+8. Grafana: dashboard giám sát, biểu đồ **Memory by cgroup (MiB)**.
+9. Grafana Explore: ảnh kết quả **3 truy vấn LogQL**.
+10. Hardening: `id` người dùng non-root, Docker network isolation, `cap_drop`, `no-new-privileges`.
+
+Không chụp màn hình để lộ mật khẩu trong `.env`, phiên đăng nhập hoặc token. Ảnh minh chứng cần phản ánh dữ liệu thực tế, không sử dụng ảnh minh họa thay cho kết quả chạy.
+
+## 14. Phạm vi và hướng phát triển
+
+Dự án hiện đáp ứng mục tiêu của bài thực hành triển khai ứng dụng nhiều dịch vụ trên Docker Compose, giám sát bằng Prometheus/Grafana, log tập trung bằng Loki/Promtail và áp dụng các kỹ thuật hardening cơ bản. Việc vận hành trên Internet cần thêm HTTPS, sao lưu định kỳ, phân quyền theo vai trò, giám sát cảnh báo, quản lý secret và kiểm thử tải/bảo mật.
+
+---
+
+**Ghi chú:** README là tài liệu hướng dẫn triển khai và tổng hợp kết quả; **không thay thế báo cáo Word tối thiểu 10 trang** theo đề bài. Các bằng chứng thực tế cần được trình bày trong báo cáo riêng.
