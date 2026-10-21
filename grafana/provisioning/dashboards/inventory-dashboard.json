@@ -1,0 +1,128 @@
+{
+    "uid":  "inventory-monitor",
+    "title":  "Inventory - System Monitoring",
+    "tags":  [
+                 "inventory",
+                 "coursework"
+             ],
+    "timezone":  "browser",
+    "schemaVersion":  39,
+    "version":  1,
+    "refresh":  "15s",
+    "time":  {
+                 "from":  "now-30m",
+                 "to":  "now"
+             },
+    "panels":  [
+                   {
+                       "id":  1,
+                       "type":  "stat",
+                       "title":  "Exporters / Services UP",
+                       "gridPos":  {
+                                       "h":  7,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  0
+                                   },
+                       "datasource":  {
+                                          "type":  "prometheus",
+                                          "uid":  "prometheus"
+                                      },
+                       "targets":  [
+                                       {
+                                           "expr":  "up{job=~\"inventory-app|nginx|mysql|cadvisor\"}",
+                                           "legendFormat":  "{{job}}",
+                                           "refId":  "A"
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  2,
+                       "type":  "timeseries",
+                       "title":  "App HTTP Requests / second",
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  12,
+                                       "y":  0
+                                   },
+                       "datasource":  {
+                                          "type":  "prometheus",
+                                          "uid":  "prometheus"
+                                      },
+                       "targets":  [
+                                       {
+                                           "expr":  "sum(rate(inventory_http_requests_total[5m]))",
+                                           "legendFormat":  "requests/s",
+                                           "refId":  "A"
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  3,
+                       "type":  "timeseries",
+                       "title":  "MySQL Connections",
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  8
+                                   },
+                       "datasource":  {
+                                          "type":  "prometheus",
+                                          "uid":  "prometheus"
+                                      },
+                       "targets":  [
+                                       {
+                                           "expr":  "mysql_global_status_threads_connected",
+                                           "legendFormat":  "MySQL",
+                                           "refId":  "A"
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  4,
+                       "type":  "timeseries",
+                       "title":  "Nginx Requests",
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  12,
+                                       "y":  8
+                                   },
+                       "datasource":  {
+                                          "type":  "prometheus",
+                                          "uid":  "prometheus"
+                                      },
+                       "targets":  [
+                                       {
+                                           "expr":  "rate(nginx_http_requests_total[5m])",
+                                           "legendFormat":  "nginx requests/s",
+                                           "refId":  "A"
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  5,
+                       "type":  "timeseries",
+                       "title":  "Memory by cgroup (MiB)",
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  24,
+                                       "x":  0,
+                                       "y":  16
+                                   },
+                       "datasource":  {
+                                          "type":  "prometheus",
+                                          "uid":  "prometheus"
+                                      },
+                       "targets":  [
+                                       {
+                                           "expr":  "sum by (id) (container_memory_working_set_bytes{job=\"cadvisor\",id!=\"\",id!=\"/\",id!=\"/docker\"}) / 1024 / 1024",
+                                           "legendFormat":  "{{id}}",
+                                           "refId":  "A"
+                                       }
+                                   ]
+                   }
+               ]
+}
